@@ -59,10 +59,11 @@ jobs:
       - name: Configure GN
         shell: pwsh
         run: |
-          Copy-Item gn_args/windows-x64.gn C:\webrtc-checkout\src\windows-x64.gn -Force
           cd C:\webrtc-checkout\src
-          $gnArgs = (Get-Content windows-x64.gn -Raw)
-          gn gen out/Release "--args=$gnArgs"
+          New-Item -ItemType Directory -Force out\Release | Out-Null
+          Copy-Item $env:GITHUB_WORKSPACE\gn_args\windows-x64.gn out\Release\args.gn -Force
+          Get-Content out\Release\args.gn
+          gn gen out/Release
 
       - name: Build libwebrtc
         shell: pwsh
