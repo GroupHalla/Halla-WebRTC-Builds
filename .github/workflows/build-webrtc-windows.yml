@@ -56,6 +56,16 @@ jobs:
           gclient sync --nohooks
           gclient runhooks
 
+      - name: Generate LASTCHANGE metadata
+        shell: pwsh
+        run: |
+          cd C:\webrtc-checkout\src
+          python build\util\lastchange.py -o build\util\LASTCHANGE
+          if (!(Test-Path build\util\LASTCHANGE.committime)) {
+            [int][double]::Parse((Get-Date -UFormat %s)) | Set-Content build\util\LASTCHANGE.committime
+          }
+          Get-ChildItem build\util\LASTCHANGE*
+
       - name: Configure GN
         shell: pwsh
         run: |
