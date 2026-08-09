@@ -1,0 +1,101 @@
+name: Build WebRTC SDK Windows x64
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag for the SDK artifact (example: v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-x64:
+    name: Build Windows x64 SDK
+    runs-on: windows-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write
+
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: '0'
+      GYP_MSVS_VERSION: '2022'
+
+    steps:
+      - name: Checkout packaging repo
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: vars
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            "tag=${{ github.event.inputs.release_tag }}" >> $env:GITHUB_OUTPUT
+          } else {
+            "tag=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Install depot_tools
+        shell: pwsh
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\depot_tools
+          "C:\depot_tools" >> $env:GITHUB_PATH
+
+      - name: Fetch WebRTC source
+        shell: cmd
+        run: |
+          mkdir C:\webrtc-checkout
+          cd /d C:\webrtc-checkout
+          fetch --nohooks webrtc
+          cd src
+          gclient sync --nohooks
+          gclient runhooks
+
+      - name: Configure GN
+        shell: pwsh
+        run: |
+          Copy-Item gn_args/windows-x64.gn C:\webrtc-checkout\src\windows-x64.gn -Force
+          cd C:\webrtc-checkout\src
+          gn gen out/Release --args=(Get-Content windows-x64.gn -Raw)
+
+      - name: Build libwebrtc
+        shell: pwsh
+        run: |
+          cd C:\webrtc-checkout\src
+          ninja -C out/Release webrtc
+
+      - name: Package SDK
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          .\scripts\package-webrtc-windows.ps1 -CheckoutRoot C:\webrtc-checkout -OutDir (Resolve-Path dist) -TagName '${{ steps.vars.outputs.tag }}'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: halla-webrtc-windows-x64
+          path: dist/halla-webrtc-windows-x64-${{ steps.vars.outputs.tag }}.zip
+
+      - name: Publish release asset
+        if: startsWith(steps.vars.outputs.tag, 'v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Halla WebRTC SDK ${{ steps.vars.outputs.tag }}
+          draft: false
+          prerelease: false
+          files: dist/halla-webrtc-windows-x64-${{ steps.vars.outputs.tag }}.zip
+          body: |
+            ## Halla WebRTC SDK ${{ steps.vars.outputs.tag }}
+
+            Initial native libwebrtc package for Halla Desktop.
+
+            Target:
+            * Windows x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

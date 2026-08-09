@@ -1,0 +1,11 @@
+target_os = "win"
+target_cpu = "x64"
+is_debug = false
+is_component_build = false
+rtc_include_tests = false
+rtc_build_examples = false
+treat_warnings_as_errors = false
+symbol_level = 0
+use_rtti = true
+is_clang = true
+enable_iterator_debugging = false
