@@ -61,7 +61,8 @@ jobs:
         run: |
           Copy-Item gn_args/windows-x64.gn C:\webrtc-checkout\src\windows-x64.gn -Force
           cd C:\webrtc-checkout\src
-          gn gen out/Release --args=(Get-Content windows-x64.gn -Raw)
+          $gnArgs = (Get-Content windows-x64.gn -Raw)
+          gn gen out/Release "--args=$gnArgs"
 
       - name: Build libwebrtc
         shell: pwsh
