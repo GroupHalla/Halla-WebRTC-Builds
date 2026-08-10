@@ -48,18 +48,18 @@ if (Test-Path $gen) {
   }
 }
 
-# The default GN target creates obj/webrtc.lib for Windows static builds.
-$candidates = @(
-  (Join-Path $out "obj\webrtc.lib"),
-  (Join-Path $out "webrtc.lib")
-)
-$lib = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $lib) {
-  Write-Host "Available .lib files:"
-  Get-ChildItem $out -Recurse -Filter "*.lib" | Select-Object -First 50 | ForEach-Object { Write-Host $_.FullName }
-  throw "webrtc.lib not found"
+# Copy every produced .lib. Newer WebRTC builds keep some factories/codecs in
+# separate static libraries, and downstream consumers need to link all of them.
+$libs = Get-ChildItem $out -Recurse -Filter "*.lib"
+if (-not $libs -or $libs.Count -eq 0) {
+  throw "No .lib files found under $out"
 }
-Copy-Item $lib (Join-Path $libdir "webrtc.lib") -Force
+foreach ($lib in $libs) {
+  $rel = $lib.FullName.Substring($out.Length + 1).Replace('\', '_').Replace('/', '_')
+  $destName = if ($rel -eq 'obj_webrtc.lib') { 'webrtc.lib' } else { $rel }
+  Copy-Item $lib.FullName (Join-Path $libdir $destName) -Force
+}
+Write-Host "Packaged $($libs.Count) libraries"
 
 # Basic license metadata.
 Copy-Item (Join-Path $src "LICENSE") (Join-Path $licenses "LICENSE.webrtc") -Force -ErrorAction SilentlyContinue
