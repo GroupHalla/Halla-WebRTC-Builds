@@ -48,20 +48,19 @@ if (Test-Path $gen) {
   }
 }
 
-# Prefer the complete static library target built for Halla. It avoids thin
-# archives and includes the audio/video codec factories needed by consumers.
-$completeCandidates = @(
-  (Join-Path $out "obj\halla_webrtc.lib"),
-  (Join-Path $out "halla_webrtc.lib")
+# The default GN target creates obj/webrtc.lib for Windows static builds.
+$candidates = @(
+  (Join-Path $out "obj\webrtc.lib"),
+  (Join-Path $out "webrtc.lib")
 )
-$complete = $completeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $complete) {
+$lib = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $lib) {
   Write-Host "Available .lib files:"
   Get-ChildItem $out -Recurse -Filter "*.lib" | Select-Object -First 80 | ForEach-Object { Write-Host $_.FullName }
-  throw "halla_webrtc.lib not found"
+  throw "webrtc.lib not found"
 }
-Copy-Item $complete (Join-Path $libdir "webrtc.lib") -Force
-Write-Host "Packaged complete library $complete"
+Copy-Item $lib (Join-Path $libdir "webrtc.lib") -Force
+Write-Host "Packaged $lib"
 
 # Basic license metadata.
 Copy-Item (Join-Path $src "LICENSE") (Join-Path $licenses "LICENSE.webrtc") -Force -ErrorAction SilentlyContinue
