@@ -9,3 +9,8 @@ symbol_level = 0
 use_rtti = true
 is_clang = true
 enable_iterator_debugging = false
+
+# Halla consumes this SDK from a regular MSVC/Qt build. Use the MSVC STL
+# instead of Chromium libc++ so exported C++ signatures match the app.
+use_custom_libcxx = false
+use_custom_libcxx_for_host = false
