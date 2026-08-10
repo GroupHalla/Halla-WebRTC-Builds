@@ -100,18 +100,15 @@ jobs:
           cd C:\webrtc-checkout\src
           $file = "BUILD.gn"
           $text = Get-Content $file -Raw
-          $pattern = 'visibility\s*=\s*\[\s*":default",\s*":webrtc_lib_link_test",\s*\]'
-          $replacement = @'
-          visibility = [
-            ":default",
-            ":webrtc_lib_link_test",
-            ":halla_webrtc",
-          ]
-          '@
-          $newText = [regex]::Replace($text, $pattern, $replacement, 1)
-          if ($newText -eq $text) { throw "Could not patch //:webrtc visibility" }
-          Set-Content $file $newText
-          Select-String -Path $file -Pattern 'visibility|halla_webrtc' | Select-Object -First 30 | ForEach-Object { Write-Host $_.Line }
+          if ($text -notmatch '"\:halla_webrtc"') {
+            $needle = '":webrtc_lib_link_test",'
+            $idx = $text.IndexOf($needle)
+            if ($idx -lt 0) { throw "Could not find :webrtc_lib_link_test visibility entry" }
+            $insertAt = $idx + $needle.Length
+            $text = $text.Insert($insertAt, "`r`n    `":halla_webrtc`",")
+            Set-Content $file $text
+          }
+          Select-String -Path $file -Pattern 'visibility|halla_webrtc|webrtc_lib_link_test' | Select-Object -First 40 | ForEach-Object { Write-Host $_.Line }
 
       - name: Configure GN
         shell: pwsh
