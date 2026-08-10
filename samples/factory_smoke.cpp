@@ -4,8 +4,6 @@ using nullptr_t = std::nullptr_t;
 #include "api/create_peerconnection_factory.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
-#include "api/video_codecs/builtin_video_decoder_factory.h"
-#include "api/video_codecs/builtin_video_encoder_factory.h"
 #include "rtc_base/ssl_adapter.h"
 #include "rtc_base/thread.h"
 
@@ -21,8 +19,8 @@ int main() {
         nullptr,
         webrtc::CreateBuiltinAudioEncoderFactory(),
         webrtc::CreateBuiltinAudioDecoderFactory(),
-        webrtc::CreateBuiltinVideoEncoderFactory(),
-        webrtc::CreateBuiltinVideoDecoderFactory(),
+        nullptr,
+        nullptr,
         nullptr, nullptr);
     if (!factory) return 13;
     factory = nullptr;
