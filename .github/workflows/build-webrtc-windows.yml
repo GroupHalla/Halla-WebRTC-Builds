@@ -66,6 +66,16 @@ jobs:
           }
           Get-ChildItem build\util\LASTCHANGE*
 
+      - name: Patch WebRTC CRT to dynamic runtime
+        shell: pwsh
+        run: |
+          cd C:\webrtc-checkout\src
+          $file = "build\config\win\BUILD.gn"
+          $text = Get-Content $file -Raw
+          $text = $text.Replace('/MTd', '/MDd').Replace('/MT', '/MD')
+          Set-Content $file $text
+          Select-String -Path $file -Pattern '/M[DT]d?|runtime_library' | Select-Object -First 80 | ForEach-Object { Write-Host $_.Line }
+
       - name: Configure GN
         shell: pwsh
         run: |
