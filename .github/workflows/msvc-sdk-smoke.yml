@@ -46,7 +46,7 @@ jobs:
         run: |
           $inc = "sdk"
           $lib = "sdk\lib\windows-x64\webrtc.lib"
-          cl /nologo /std:c++20 /EHsc /DWEBRTC_WIN=1 /DNOMINMAX /DWIN32_LEAN_AND_MEAN `
+          cl /nologo /std:c++20 /MD /EHsc /DWEBRTC_WIN=1 /DNOMINMAX /DWIN32_LEAN_AND_MEAN `
             /I "$inc\include" `
             /I "$inc\include\third_party\abseil-cpp" `
             /I "$inc\include\third_party\libyuv\include" `
