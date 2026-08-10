@@ -94,6 +94,25 @@ jobs:
           }
           '@
 
+      - name: Allow Halla complete target to depend on WebRTC root target
+        shell: pwsh
+        run: |
+          cd C:\webrtc-checkout\src
+          $file = "BUILD.gn"
+          $text = Get-Content $file -Raw
+          $pattern = 'visibility\s*=\s*\[\s*":default",\s*":webrtc_lib_link_test",\s*\]'
+          $replacement = @'
+          visibility = [
+            ":default",
+            ":webrtc_lib_link_test",
+            ":halla_webrtc",
+          ]
+          '@
+          $newText = [regex]::Replace($text, $pattern, $replacement, 1)
+          if ($newText -eq $text) { throw "Could not patch //:webrtc visibility" }
+          Set-Content $file $newText
+          Select-String -Path $file -Pattern 'visibility|halla_webrtc' | Select-Object -First 30 | ForEach-Object { Write-Host $_.Line }
+
       - name: Configure GN
         shell: pwsh
         run: |
