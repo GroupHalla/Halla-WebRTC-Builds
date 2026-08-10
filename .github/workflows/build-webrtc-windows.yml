@@ -76,6 +76,24 @@ jobs:
           Set-Content $file $text
           Select-String -Path $file -Pattern '/M[DT]d?|runtime_library' | Select-Object -First 80 | ForEach-Object { Write-Host $_.Line }
 
+      - name: Add Halla complete static library target
+        shell: pwsh
+        run: |
+          cd C:\webrtc-checkout\src
+          Add-Content BUILD.gn @'
+
+rtc_static_library("halla_webrtc") {
+  complete_static_lib = true
+  deps = [
+    ":webrtc",
+    "//api/audio_codecs:builtin_audio_decoder_factory",
+    "//api/audio_codecs:builtin_audio_encoder_factory",
+    "//api/video_codecs:builtin_video_decoder_factory",
+    "//api/video_codecs:builtin_video_encoder_factory",
+  ]
+}
+'@
+
       - name: Configure GN
         shell: pwsh
         run: |
@@ -89,7 +107,7 @@ jobs:
         shell: pwsh
         run: |
           cd C:\webrtc-checkout\src
-          ninja -C out/Release webrtc
+          ninja -C out/Release halla_webrtc
 
       - name: Package SDK
         shell: pwsh

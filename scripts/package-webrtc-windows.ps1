@@ -48,18 +48,20 @@ if (Test-Path $gen) {
   }
 }
 
-# Copy every produced .lib. Newer WebRTC builds keep some factories/codecs in
-# separate static libraries, and downstream consumers need to link all of them.
-$libs = Get-ChildItem $out -Recurse -Filter "*.lib"
-if (-not $libs -or $libs.Count -eq 0) {
-  throw "No .lib files found under $out"
+# Prefer the complete static library target built for Halla. It avoids thin
+# archives and includes the audio/video codec factories needed by consumers.
+$completeCandidates = @(
+  (Join-Path $out "obj\halla_webrtc.lib"),
+  (Join-Path $out "halla_webrtc.lib")
+)
+$complete = $completeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $complete) {
+  Write-Host "Available .lib files:"
+  Get-ChildItem $out -Recurse -Filter "*.lib" | Select-Object -First 80 | ForEach-Object { Write-Host $_.FullName }
+  throw "halla_webrtc.lib not found"
 }
-foreach ($lib in $libs) {
-  $rel = $lib.FullName.Substring($out.Length + 1).Replace('\', '_').Replace('/', '_')
-  $destName = if ($rel -eq 'obj_webrtc.lib') { 'webrtc.lib' } else { $rel }
-  Copy-Item $lib.FullName (Join-Path $libdir $destName) -Force
-}
-Write-Host "Packaged $($libs.Count) libraries"
+Copy-Item $complete (Join-Path $libdir "webrtc.lib") -Force
+Write-Host "Packaged complete library $complete"
 
 # Basic license metadata.
 Copy-Item (Join-Path $src "LICENSE") (Join-Path $licenses "LICENSE.webrtc") -Force -ErrorAction SilentlyContinue
