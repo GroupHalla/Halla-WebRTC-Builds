@@ -82,17 +82,17 @@ jobs:
           cd C:\webrtc-checkout\src
           Add-Content BUILD.gn @'
 
-rtc_static_library("halla_webrtc") {
-  complete_static_lib = true
-  deps = [
-    ":webrtc",
-    "//api/audio_codecs:builtin_audio_decoder_factory",
-    "//api/audio_codecs:builtin_audio_encoder_factory",
-    "//api/video_codecs:builtin_video_decoder_factory",
-    "//api/video_codecs:builtin_video_encoder_factory",
-  ]
-}
-'@
+          rtc_static_library("halla_webrtc") {
+            complete_static_lib = true
+            deps = [
+              ":webrtc",
+              "//api/audio_codecs:builtin_audio_decoder_factory",
+              "//api/audio_codecs:builtin_audio_encoder_factory",
+              "//api/video_codecs:builtin_video_decoder_factory",
+              "//api/video_codecs:builtin_video_encoder_factory",
+            ]
+          }
+          '@
 
       - name: Configure GN
         shell: pwsh
