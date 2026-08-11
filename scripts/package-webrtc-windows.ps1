@@ -1,7 +1,9 @@
 param(
   [Parameter(Mandatory=$true)][string]$CheckoutRoot,
   [Parameter(Mandatory=$true)][string]$OutDir,
-  [Parameter(Mandatory=$true)][string]$TagName
+  [Parameter(Mandatory=$true)][string]$TagName,
+  [Parameter(Mandatory=$true)][string]$WebRtcRevision,
+  [Parameter(Mandatory=$true)][string]$DepotToolsRevision
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,8 +69,37 @@ Copy-Item (Join-Path $src "LICENSE") (Join-Path $licenses "LICENSE.webrtc") -For
 Set-Content -Path (Join-Path $pkg "VERSION.txt") -Value @(
   "tag=$TagName",
   "target=windows-x64",
+  "webrtc_revision=$WebRtcRevision",
+  "depot_tools_revision=$DepotToolsRevision",
+  "gn_args_sha256=$((Get-FileHash (Join-Path $PSScriptRoot "..\gn_args\windows-x64.gn") -Algorithm SHA256).Hash.ToLower())",
   "built=$(Get-Date -AsUTC -Format o)"
 )
+
+$sbom = [ordered]@{
+  spdxVersion = "SPDX-2.3"
+  dataLicense = "CC0-1.0"
+  SPDXID = "SPDXRef-DOCUMENT"
+  name = "Halla-WebRTC-Windows-x64-$TagName"
+  documentNamespace = "https://github.com/GroupHalla/Halla-WebRTC-Builds/$TagName/$WebRtcRevision"
+  creationInfo = @{ created = (Get-Date -AsUTC -Format "yyyy-MM-ddTHH:mm:ssZ"); creators = @("Tool: Halla-WebRTC-Builds") }
+  packages = @(@{
+    name = "libwebrtc"
+    SPDXID = "SPDXRef-Package-libwebrtc"
+    versionInfo = $WebRtcRevision
+    downloadLocation = "git+https://webrtc.googlesource.com/src.git@$WebRtcRevision"
+    filesAnalyzed = $false
+    licenseConcluded = "BSD-3-Clause"
+    licenseDeclared = "BSD-3-Clause"
+  })
+}
+$sbom | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 (Join-Path $pkg "SBOM.spdx.json")
+
+$manifestLines = Get-ChildItem $pkg -Recurse -File | Where-Object { $_.Name -ne "MANIFEST.sha256" } | ForEach-Object {
+  $relative = $_.FullName.Substring($pkg.Length + 1).Replace('\', '/')
+  $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+  "$hash  $relative"
+}
+$manifestLines | Set-Content -Encoding ascii (Join-Path $pkg "MANIFEST.sha256")
 
 $zip = Join-Path $OutDir "halla-webrtc-windows-x64-$TagName.zip"
 Remove-Item -Force $zip -ErrorAction SilentlyContinue

@@ -1,47 +1,46 @@
 # Halla WebRTC Builds
 
-Prebuilt native WebRTC SDK packages used by the Halla desktop client.
+Reproducible prebuilt native WebRTC SDK used by Halla Desktop.
 
-The Halla desktop repository consumes these release assets through `HALLA_WEBRTC_SDK_DIR`.
-Artifacts are intentionally kept out of the application repositories because libwebrtc is large and expensive to build.
+## Current release line
 
-## Packages
+- Package version: `0.1.13` (`VERSION`)
+- WebRTC source: exact commit in `WEBRTC_REVISION`
+- depot_tools: exact commit in `DEPOT_TOOLS_REVISION`
+- Target: Windows x64, MSVC ABI, dynamic CRT (`/MD`)
 
-Initial target:
-
-- `halla-webrtc-windows-x64-<tag>.zip`
-
-Planned targets:
-
-- `halla-webrtc-linux-x64-<tag>.tar.gz`
-- `halla-webrtc-linux-arm64-<tag>.tar.gz`
-
-## Package layout
+## Release contents
 
 ```text
 halla-webrtc-sdk/
   VERSION.txt
-  include/          # WebRTC headers and generated headers
-  lib/windows-x64/  # webrtc.lib
+  MANIFEST.sha256
+  SBOM.spdx.json
+  include/
+  lib/windows-x64/webrtc.lib
   licenses/
 ```
 
+Every release publishes both the ZIP and `<zip>.sha256`. Consumers must verify
+the external checksum before extraction and then verify `MANIFEST.sha256`.
+`VERSION.txt` records both upstream commits and the GN-arguments hash.
+
 ## Building
 
-The Windows workflow builds libwebrtc with Chromium `depot_tools`, GN and Ninja.
-It is intentionally manual/tag-driven because a full WebRTC build is large and slow.
+Tag must match `v$(cat VERSION)`:
 
 ```text
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.13
+git push origin v0.1.13
 ```
 
-or run the workflow manually from GitHub Actions.
+The workflow checks out immutable WebRTC/depot_tools revisions, builds with GN
+and Ninja, creates an SPDX SBOM and runs a real MSVC factory link smoke test.
 
 ## Halla Desktop usage
 
-After publishing a release asset, Halla desktop can download and configure with:
-
 ```bash
-cmake -S . -B build -DHALLA_WEBRTC_SDK_DIR=/path/to/halla-webrtc-sdk
+cmake -S . -B build \
+  -DHALLA_WEBRTC_SDK_DIR=/path/to/halla-webrtc-sdk \
+  -DHALLA_ENABLE_WEBRTC_NATIVE=ON
 ```

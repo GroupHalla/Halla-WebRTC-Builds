@@ -1,123 +1,155 @@
-name: Build WebRTC SDK Windows x64
+name: Reproducible WebRTC SDK Windows x64
 
 on:
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release tag for the SDK artifact (example: v0.1.0)'
-        required: true
-        default: 'v0.1.0'
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
 
 permissions:
   contents: read
 
 jobs:
   build-windows-x64:
-    name: Build Windows x64 SDK
     runs-on: windows-latest
     timeout-minutes: 360
-    permissions:
-      contents: write
-
-    env:
-      DEPOT_TOOLS_WIN_TOOLCHAIN: '0'
-      GYP_MSVS_VERSION: '2022'
-
     steps:
-      - name: Checkout packaging repo
-        uses: actions/checkout@v4
+      - name: Checkout packaging repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Resolve release tag
+      - name: Resolve and validate immutable inputs
         id: vars
         shell: pwsh
         run: |
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            "tag=${{ github.event.inputs.release_tag }}" >> $env:GITHUB_OUTPUT
-          } else {
-            "tag=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+          $version = (Get-Content VERSION -Raw).Trim()
+          $tag = "v$version"
+          if ('${{ github.ref_type }}' -eq 'tag' -and '${{ github.ref_name }}' -ne $tag) {
+            throw "Tag ${{ github.ref_name }} does not match VERSION=$version"
           }
+          $webrtc = (Get-Content WEBRTC_REVISION -Raw).Trim()
+          $depot = (Get-Content DEPOT_TOOLS_REVISION -Raw).Trim()
+          if ($webrtc -notmatch '^[0-9a-f]{40}$' -or $depot -notmatch '^[0-9a-f]{40}$') { throw "Revision files must contain 40-char commits" }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "webrtc=$webrtc" >> $env:GITHUB_OUTPUT
+          "depot=$depot" >> $env:GITHUB_OUTPUT
 
-      - name: Install depot_tools
+      - name: Set up MSVC x64
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x64
+
+      - name: Install pinned depot_tools
         shell: pwsh
         run: |
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\depot_tools
+          git -C C:\depot_tools checkout --detach '${{ steps.vars.outputs.depot }}'
+          if ((git -C C:\depot_tools rev-parse HEAD).Trim() -ne '${{ steps.vars.outputs.depot }}') { throw "depot_tools revision mismatch" }
           "C:\depot_tools" >> $env:GITHUB_PATH
 
-      - name: Fetch WebRTC source
-        shell: cmd
+      - name: Fetch and pin WebRTC source
+        shell: pwsh
+        env:
+          DEPOT_TOOLS_WIN_TOOLCHAIN: '0'
+          GYP_MSVS_VERSION: '2022'
         run: |
-          mkdir C:\webrtc-checkout
-          cd /d C:\webrtc-checkout
+          New-Item -ItemType Directory -Force C:\webrtc-checkout | Out-Null
+          Push-Location C:\webrtc-checkout
           fetch --nohooks webrtc
-          cd src
-          gclient sync --nohooks
+          Set-Location src
+          git fetch origin '${{ steps.vars.outputs.webrtc }}'
+          git checkout --detach '${{ steps.vars.outputs.webrtc }}'
+          gclient sync --nohooks --delete_unversioned_trees --revision 'src@${{ steps.vars.outputs.webrtc }}'
           gclient runhooks
+          if ((git rev-parse HEAD).Trim() -ne '${{ steps.vars.outputs.webrtc }}') { throw "WebRTC revision mismatch" }
+          Pop-Location
 
       - name: Generate LASTCHANGE metadata
         shell: pwsh
         run: |
-          cd C:\webrtc-checkout\src
+          Set-Location C:\webrtc-checkout\src
           python build\util\lastchange.py -o build\util\LASTCHANGE
           if (!(Test-Path build\util\LASTCHANGE.committime)) {
             [int][double]::Parse((Get-Date -UFormat %s)) | Set-Content build\util\LASTCHANGE.committime
           }
-          Get-ChildItem build\util\LASTCHANGE*
 
       - name: Patch WebRTC CRT to dynamic runtime
         shell: pwsh
         run: |
-          cd C:\webrtc-checkout\src
+          Set-Location C:\webrtc-checkout\src
           $file = "build\config\win\BUILD.gn"
           $text = Get-Content $file -Raw
           $text = $text.Replace('/MTd', '/MDd').Replace('/MT', '/MD')
           Set-Content $file $text
-          Select-String -Path $file -Pattern '/M[DT]d?|runtime_library' | Select-Object -First 80 | ForEach-Object { Write-Host $_.Line }
 
       - name: Configure GN
         shell: pwsh
         run: |
-          cd C:\webrtc-checkout\src
+          Set-Location C:\webrtc-checkout\src
           New-Item -ItemType Directory -Force out\Release | Out-Null
           Copy-Item $env:GITHUB_WORKSPACE\gn_args\windows-x64.gn out\Release\args.gn -Force
-          Get-Content out\Release\args.gn
           gn gen out/Release
 
       - name: Build libwebrtc
         shell: pwsh
         run: |
-          cd C:\webrtc-checkout\src
+          Set-Location C:\webrtc-checkout\src
           ninja -C out/Release webrtc
 
-      - name: Package SDK
+      - name: Package SDK with provenance, SBOM and manifest
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          .\scripts\package-webrtc-windows.ps1 -CheckoutRoot C:\webrtc-checkout -OutDir (Resolve-Path dist) -TagName '${{ steps.vars.outputs.tag }}'
+          .\scripts\package-webrtc-windows.ps1 `
+            -CheckoutRoot C:\webrtc-checkout `
+            -OutDir (Resolve-Path dist) `
+            -TagName '${{ steps.vars.outputs.tag }}' `
+            -WebRtcRevision '${{ steps.vars.outputs.webrtc }}' `
+            -DepotToolsRevision '${{ steps.vars.outputs.depot }}'
+          $zip = "dist\halla-webrtc-windows-x64-${{ steps.vars.outputs.tag }}.zip"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $(Split-Path $zip -Leaf)" | Set-Content -Encoding ascii "$zip.sha256"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Compile and run SDK factory smoke test
+        shell: pwsh
+        run: |
+          $zip = "dist\halla-webrtc-windows-x64-${{ steps.vars.outputs.tag }}.zip"
+          Expand-Archive $zip -DestinationPath sdk -Force
+          $libs = Get-ChildItem "sdk\lib\windows-x64" -Filter "*.lib" | ForEach-Object { $_.FullName }
+          cl /nologo /std:c++20 /MD /EHsc /DWEBRTC_WIN=1 /DNOMINMAX /DWIN32_LEAN_AND_MEAN `
+            /I "sdk\include" /I "sdk\include\third_party\abseil-cpp" /I "sdk\include\third_party\libyuv\include" `
+            samples\factory_smoke.cpp `
+            /link $libs ws2_32.lib winmm.lib secur32.lib crypt32.lib iphlpapi.lib dmoguids.lib strmiids.lib msdmo.lib wmcodecdspuuid.lib ole32.lib oleaut32.lib user32.lib advapi32.lib /out:webrtc_factory_smoke.exe
+          .\webrtc_factory_smoke.exe
+
+      - name: Upload immutable SDK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: halla-webrtc-windows-x64
-          path: dist/halla-webrtc-windows-x64-${{ steps.vars.outputs.tag }}.zip
+          if-no-files-found: error
+          path: |
+            dist/halla-webrtc-windows-x64-${{ steps.vars.outputs.tag }}.zip
+            dist/halla-webrtc-windows-x64-${{ steps.vars.outputs.tag }}.zip.sha256
 
-      - name: Publish release asset
-        if: startsWith(steps.vars.outputs.tag, 'v')
-        uses: softprops/action-gh-release@v2
+  release:
+    if: github.ref_type == 'tag'
+    needs: build-windows-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download SDK artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: Halla WebRTC SDK ${{ steps.vars.outputs.tag }}
+          name: halla-webrtc-windows-x64
+          path: dist
+
+      - name: Publish SDK release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Halla WebRTC SDK ${{ github.ref_name }}
           draft: false
           prerelease: false
-          files: dist/halla-webrtc-windows-x64-${{ steps.vars.outputs.tag }}.zip
-          body: |
-            ## Halla WebRTC SDK ${{ steps.vars.outputs.tag }}
-
-            Initial native libwebrtc package for Halla Desktop.
-
-            Target:
-            * Windows x64
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: true
+          files: |
+            dist/halla-webrtc-windows-x64-${{ github.ref_name }}.zip
+            dist/halla-webrtc-windows-x64-${{ github.ref_name }}.zip.sha256

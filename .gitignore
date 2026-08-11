@@ -1,0 +1,7 @@
+dist/
+sdk/
+*.zip
+*.sha256
+*.exe
+.vscode/
+.idea/

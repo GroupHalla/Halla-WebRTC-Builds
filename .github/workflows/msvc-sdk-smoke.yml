@@ -1,55 +1,43 @@
-name: MSVC SDK Link Smoke
+name: Published SDK link smoke
 
 on:
   workflow_dispatch:
     inputs:
       sdk_version:
-        description: 'Halla-WebRTC-Builds release tag'
+        description: Halla-WebRTC-Builds release tag
         required: true
-        default: 'v0.1.3'
+        default: v0.1.13
 
 permissions:
   contents: read
 
 jobs:
-  msvc-link-smoke:
-    name: MSVC link smoke
+  smoke:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Resolve SDK version
-        id: vars
-        shell: pwsh
-        run: "echo \"tag=${{ github.event.inputs.sdk_version }}\" >> $env:GITHUB_OUTPUT"
-
-      - name: Download SDK
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SDK_VERSION: ${{ steps.vars.outputs.tag }}
-        run: |
-          $url = "https://github.com/GroupHalla/Halla-WebRTC-Builds/releases/download/$env:SDK_VERSION/halla-webrtc-windows-x64-$env:SDK_VERSION.zip"
-          Invoke-WebRequest -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } -Uri $url -OutFile sdk.zip
-          Expand-Archive sdk.zip -DestinationPath sdk -Force
-          Get-ChildItem sdk -Recurse | Select-Object -First 20 | ForEach-Object { Write-Host $_.FullName }
-
-      - name: Setup MSVC dev shell
-        uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
         with:
           arch: x64
-
-      - name: Compile and link smoke
+      - name: Download and verify published SDK
+        shell: pwsh
+        env:
+          SDK_VERSION: ${{ inputs.sdk_version }}
+        run: |
+          $base = "https://github.com/GroupHalla/Halla-WebRTC-Builds/releases/download/$env:SDK_VERSION/halla-webrtc-windows-x64-$env:SDK_VERSION.zip"
+          Invoke-WebRequest -Uri $base -OutFile sdk.zip
+          Invoke-WebRequest -Uri "$base.sha256" -OutFile sdk.zip.sha256
+          $expected = ((Get-Content sdk.zip.sha256 -Raw) -split '\s+')[0].ToLower()
+          $actual = (Get-FileHash sdk.zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { throw "SDK SHA-256 mismatch" }
+          Expand-Archive sdk.zip -DestinationPath sdk -Force
+      - name: Compile and run factory smoke
         shell: pwsh
         run: |
-          $inc = "sdk"
           $libs = Get-ChildItem "sdk\lib\windows-x64" -Filter "*.lib" | ForEach-Object { $_.FullName }
           cl /nologo /std:c++20 /MD /EHsc /DWEBRTC_WIN=1 /DNOMINMAX /DWIN32_LEAN_AND_MEAN `
-            /I "$inc\include" `
-            /I "$inc\include\third_party\abseil-cpp" `
-            /I "$inc\include\third_party\libyuv\include" `
+            /I "sdk\include" /I "sdk\include\third_party\abseil-cpp" /I "sdk\include\third_party\libyuv\include" `
             samples\factory_smoke.cpp `
             /link $libs ws2_32.lib winmm.lib secur32.lib crypt32.lib iphlpapi.lib dmoguids.lib strmiids.lib msdmo.lib wmcodecdspuuid.lib ole32.lib oleaut32.lib user32.lib advapi32.lib /out:webrtc_factory_smoke.exe
           .\webrtc_factory_smoke.exe
