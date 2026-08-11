@@ -10,8 +10,11 @@ permissions:
 
 jobs:
   build-windows-x64:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 360
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: '0'
+      GYP_MSVS_VERSION: '2022'
     steps:
       - name: Checkout packaging repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -47,9 +50,6 @@ jobs:
 
       - name: Fetch and pin WebRTC source
         shell: pwsh
-        env:
-          DEPOT_TOOLS_WIN_TOOLCHAIN: '0'
-          GYP_MSVS_VERSION: '2022'
         run: |
           New-Item -ItemType Directory -Force C:\webrtc-checkout | Out-Null
           Push-Location C:\webrtc-checkout

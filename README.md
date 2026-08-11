@@ -4,7 +4,7 @@ Reproducible prebuilt native WebRTC SDK used by Halla Desktop.
 
 ## Current release line
 
-- Package version: `0.1.13` (`VERSION`)
+- Package version: `0.1.14` (`VERSION`)
 - WebRTC source: exact commit in `WEBRTC_REVISION`
 - depot_tools: exact commit in `DEPOT_TOOLS_REVISION`
 - Target: Windows x64, MSVC ABI, dynamic CRT (`/MD`)
@@ -30,8 +30,8 @@ the external checksum before extraction and then verify `MANIFEST.sha256`.
 Tag must match `v$(cat VERSION)`:
 
 ```text
-git tag v0.1.13
-git push origin v0.1.13
+git tag v0.1.14
+git push origin v0.1.14
 ```
 
 The workflow checks out immutable WebRTC/depot_tools revisions, builds with GN
