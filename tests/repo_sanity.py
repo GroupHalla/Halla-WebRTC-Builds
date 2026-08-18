@@ -30,6 +30,10 @@ assert "setAudioRecordEnabled(false)" in external_audio
 assert "pushPcm16Mono48k" in external_audio
 assert "CALLBACK_INTERVAL_NS = 10_000_000L" in pcm_queue
 assert "MAX_BUFFERED_BYTES" in pcm_queue
+patcher = (root / "tools/patch_webrtc_android_aar.py").read_text(encoding="utf-8")
+assert 'target.replace(b"hasArray", b"isDirect")' in patcher
+assert "EXPECTED_UPSTREAM_SHA256" in patcher
+assert "halla-webrtc-android-144.7559.09-p1.aar" in android_workflow
 
 if "--verify-upstream" in sys.argv:
     urls = {

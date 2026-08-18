@@ -35,6 +35,15 @@ jobs:
             exit 1
           fi
 
+      - name: Patch and verify pinned WebRTC Android AAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/webrtc-upstream.aar" \
+            https://repo1.maven.org/maven2/io/github/webrtc-sdk/android/144.7559.09/android-144.7559.09.aar
+          python3 tools/patch_webrtc_android_aar.py \
+            "$RUNNER_TEMP/webrtc-upstream.aar" "$RUNNER_TEMP/halla-webrtc-android.aar"
+
       - name: Test, lint, build and generate Maven publication
         run: |
           ./gradlew --no-daemon \
@@ -52,9 +61,12 @@ jobs:
           published="android-sdk/build/repo/com/halla/webrtc/external-audio-android/$version"
           mkdir -p dist
           cp android-sdk/build/outputs/aar/android-sdk-release.aar "dist/$base.aar"
+          cp "$RUNNER_TEMP/halla-webrtc-android.aar" \
+            "dist/halla-webrtc-android-144.7559.09-p1.aar"
           cp "$published/external-audio-android-$version-sources.jar" "dist/$base-sources.jar"
           cp "$published/external-audio-android-$version.pom" "dist/$base.pom"
-          (cd dist && sha256sum "$base.aar" "$base-sources.jar" "$base.pom" > "$base.sha256")
+          (cd dist && sha256sum "$base.aar" "$base-sources.jar" "$base.pom" \
+            halla-webrtc-android-144.7559.09-p1.aar > "$base.sha256")
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -69,6 +69,8 @@ PeerConnectionFactory factory = PeerConnectionFactory.builder()
 external.pushPcm16Mono48k(pcm);
 ```
 
-Release tags use `android-v$(cat ANDROID_VERSION)` and publish the AAR,
-sources JAR, generated Maven POM and SHA-256 files. The POM declares the exact
-upstream WebRTC Android dependency.
+Release tags use `android-v$(cat ANDROID_VERSION)` and publish the wrapper AAR,
+sources JAR, Maven POM, checksums and a patched upstream AAR. The pinned upstream
+build incorrectly checked `hasArray()` after allocating its native direct audio
+buffer; Halla's reproducible patch changes that check to `isDirect()`, allowing
+the public external-audio callback to initialize.
