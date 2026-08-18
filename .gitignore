@@ -1,5 +1,8 @@
 dist/
 sdk/
+.gradle/
+**/build/
+local.properties
 *.zip
 *.sha256
 *.exe

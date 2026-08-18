@@ -1,6 +1,6 @@
 # Halla WebRTC Builds
 
-Reproducible prebuilt native WebRTC SDK used by Halla Desktop.
+Reproducible WebRTC SDKs used by Halla Desktop and Halla Mobile.
 
 ## Current release line
 
@@ -44,3 +44,31 @@ cmake -S . -B build \
   -DHALLA_WEBRTC_SDK_DIR=/path/to/halla-webrtc-sdk \
   -DHALLA_ENABLE_WEBRTC_NATIVE=ON
 ```
+
+## Android external-audio SDK
+
+`android-sdk/` adds a stable PCM-injection API on top of the maintained
+`io.github.webrtc-sdk:android` AAR. It uses libwebrtc's public
+`JavaAudioDeviceModule.AudioBufferCallback`, while disabling the microphone
+owned by that ADM, so Halla can feed `AudioPlaybackCapture` without opening a
+second microphone.
+
+Input contract:
+
+- signed PCM 16-bit little-endian;
+- mono, 48 kHz;
+- arbitrary chunk sizes (internally paced into 10 ms WebRTC buffers);
+- bounded two-second queue.
+
+```java
+HallaExternalAudioDeviceModule external =
+    HallaExternalAudioDeviceModule.create(context);
+PeerConnectionFactory factory = PeerConnectionFactory.builder()
+    .setAudioDeviceModule(external.audioDeviceModule())
+    .createPeerConnectionFactory();
+external.pushPcm16Mono48k(pcm);
+```
+
+Release tags use `android-v$(cat ANDROID_VERSION)` and publish the AAR,
+sources JAR, generated Maven POM and SHA-256 files. The POM declares the exact
+upstream WebRTC Android dependency.

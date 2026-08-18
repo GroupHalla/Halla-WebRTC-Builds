@@ -11,13 +11,25 @@ for name in ("WEBRTC_REVISION", "DEPOT_TOOLS_REVISION"):
     revisions[name] = (root / name).read_text(encoding="utf-8").strip()
     assert re.fullmatch(r"[0-9a-f]{40}", revisions[name]), name
 workflow = (root / ".github/workflows/build-webrtc-windows.yml").read_text(encoding="utf-8")
+android_workflow = (root / ".github/workflows/build-webrtc-android.yml").read_text(encoding="utf-8")
 packager = (root / "scripts/package-webrtc-windows.ps1").read_text(encoding="utf-8")
 assert "MANIFEST.sha256" in packager and "zip.sha256" in workflow
 assert "CreatePeerConnection" in (root / "samples/factory_smoke.cpp").read_text(encoding="utf-8")
-for line in workflow.splitlines():
-    if "uses:" in line:
-        ref = line.split("@", 1)[-1].split()[0]
-        assert re.fullmatch(r"[0-9a-f]{40}", ref), line
+for workflow_text in (workflow, android_workflow):
+    for line in workflow_text.splitlines():
+        if "uses:" in line:
+            ref = line.split("@", 1)[-1].split()[0]
+            assert re.fullmatch(r"[0-9a-f]{40}", ref), line
+
+android_version = (root / "ANDROID_VERSION").read_text(encoding="utf-8").strip()
+assert re.fullmatch(r"\d+\.\d+\.\d+", android_version)
+external_audio = (root / "android-sdk/src/main/java/com/halla/webrtc/audio/HallaExternalAudioDeviceModule.java").read_text(encoding="utf-8")
+pcm_queue = (root / "android-sdk/src/main/java/com/halla/webrtc/audio/HallaPcmQueue.java").read_text(encoding="utf-8")
+assert "setAudioBufferCallback" in external_audio
+assert "setAudioRecordEnabled(false)" in external_audio
+assert "pushPcm16Mono48k" in external_audio
+assert "CALLBACK_INTERVAL_NS = 10_000_000L" in pcm_queue
+assert "MAX_BUFFERED_BYTES" in pcm_queue
 
 if "--verify-upstream" in sys.argv:
     urls = {
