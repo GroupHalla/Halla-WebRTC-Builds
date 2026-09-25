@@ -81,6 +81,25 @@ jobs:
             date +%s > build/util/LASTCHANGE.committime
           fi
 
+      # libstdc++ não expõe ::nullptr_t no escopo global (libc++ e MSVC STL
+      # expõem). O libwebrtc usa nullptr_t não-qualificado em headers como
+      # rtc_base/ssl_stream_adapter.h — com use_custom_libcxx=false (libstdc++
+      # do sistema, exigido para a ABI do app) isso não compila. O mesmo
+      # problema é tratado no lado do consumidor do SDK Windows (o app faz
+      # "using nullptr_t = std::nullptr_t"); aqui qualificamos TODOS os usos
+      # não-qualificados do checkout — lookbehind evita tocar std::nullptr_t.
+      - name: Patch webrtc for libstdc++ (std::nullptr_t)
+        run: |
+          set -e
+          cd "$HOME/webrtc-checkout/src"
+          files=$(grep -rl --include='*.h' --include='*.cc' --include='*.cpp' 'nullptr_t' . || true)
+          if [ -n "$files" ]; then
+            # Guarda do "using nullptr_t = std::nullptr_t" (alias já correto —
+            # qualificá-lo viraria "using std::nullptr_t = ...", inválido).
+            echo "$files" | xargs perl -pi -e 'next if /^\s*using\s+nullptr_t\b/; s/(?<!::)\bnullptr_t\b/std::nullptr_t/g'
+            echo "nullptr_t qualificado em $(echo "$files" | wc -l) arquivos"
+          fi
+
       - name: Configure GN
         run: |
           cd "$HOME/webrtc-checkout/src"
