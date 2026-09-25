@@ -1,0 +1,23 @@
+target_os = "linux"
+target_cpu = "x64"
+is_debug = false
+is_component_build = false
+rtc_include_tests = false
+rtc_build_examples = false
+treat_warnings_as_errors = false
+symbol_level = 0
+use_rtti = true
+is_clang = true
+enable_iterator_debugging = false
+
+# Halla consumes this SDK from a regular GCC/libstdc++ (Qt) build. Use the
+# system libstdc++ instead of Chromium libc++ so exported C++ signatures
+# match the app (same decision as the Windows SDK, which uses the MSVC STL).
+use_custom_libcxx = false
+use_custom_libcxx_for_host = false
+
+# Build against the runner's Ubuntu 22.04 system libraries (glibc 2.35,
+# libstdc++ 11) instead of the Chromium Debian sysroot: the Halla AppImage
+# targets Ubuntu 22.04/Debian 12+ anyway, and the sysroot's older libstdc++
+# headers lack the C++20 pieces current libwebrtc requires.
+use_sysroot = false

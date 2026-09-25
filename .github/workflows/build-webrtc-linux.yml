@@ -1,0 +1,159 @@
+name: Reproducible WebRTC SDK Linux x64
+
+# SDK Linux x64 do mesmo commit do libwebrtc do SDK Windows (WEBRTC_REVISION)
+# para que clientes Windows e Linux negociem mídia entre si com a mesma pilha.
+# A tag de release é `linux-v$(cat VERSION)` para não redispensar o build
+# Windows (que dispara em `v*`).
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['linux-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux-x64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout packaging repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Resolve and validate immutable inputs
+        id: vars
+        run: |
+          version=$(cat VERSION | tr -d '[:space:]')
+          tag="linux-v${version}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "${tag}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match VERSION=${version}"; exit 1
+          fi
+          webrtc=$(cat WEBRTC_REVISION | tr -d '[:space:]')
+          depot=$(cat DEPOT_TOOLS_REVISION | tr -d '[:space:]')
+          if ! [[ "$webrtc" =~ ^[0-9a-f]{40}$ ]] || ! [[ "$depot" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Revision files must contain 40-char commits"; exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "webrtc=${webrtc}" >> "$GITHUB_OUTPUT"
+          echo "depot=${depot}" >> "$GITHUB_OUTPUT"
+
+      # Sem o sysroot do Chromium (use_sysroot=false) o build usa as libs do
+      # host: pacotes de dev que o GN consulta via pkg-config.
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config python3 \
+            libx11-dev libxext-dev libxfixes-dev libxcomposite-dev \
+            libxdamage-dev libxrandr-dev libxtst-dev libxshmfence-dev \
+            libasound2-dev libpulse-dev libglib2.0-dev \
+            libdrm-dev libgbm-dev libegl1-mesa-dev libgl1-mesa-dev
+
+      - name: Install pinned depot_tools
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$HOME/depot_tools"
+          git -C "$HOME/depot_tools" checkout --detach "${{ steps.vars.outputs.depot }}"
+          if [ "$(git -C "$HOME/depot_tools" rev-parse HEAD)" != "${{ steps.vars.outputs.depot }}" ]; then
+            echo "depot_tools revision mismatch"; exit 1
+          fi
+          echo "$HOME/depot_tools" >> "$GITHUB_PATH"
+
+      - name: Fetch and pin WebRTC source
+        run: |
+          mkdir -p "$HOME/webrtc-checkout"
+          cd "$HOME/webrtc-checkout"
+          fetch --nohooks webrtc
+          cd src
+          git fetch origin "${{ steps.vars.outputs.webrtc }}"
+          git checkout --detach "${{ steps.vars.outputs.webrtc }}"
+          gclient sync --nohooks --delete_unversioned_trees --revision "src@${{ steps.vars.outputs.webrtc }}"
+          gclient runhooks
+          if [ "$(git rev-parse HEAD)" != "${{ steps.vars.outputs.webrtc }}" ]; then
+            echo "WebRTC revision mismatch"; exit 1
+          fi
+
+      - name: Generate LASTCHANGE metadata
+        run: |
+          cd "$HOME/webrtc-checkout/src"
+          python3 build/util/lastchange.py -o build/util/LASTCHANGE
+          if [ ! -f build/util/LASTCHANGE.committime ]; then
+            date +%s > build/util/LASTCHANGE.committime
+          fi
+
+      - name: Configure GN
+        run: |
+          cd "$HOME/webrtc-checkout/src"
+          mkdir -p out/Release
+          cp "$GITHUB_WORKSPACE/gn_args/linux-x64.gn" out/Release/args.gn
+          gn gen out/Release
+
+      - name: Build libwebrtc
+        run: |
+          cd "$HOME/webrtc-checkout/src"
+          ninja -C out/Release webrtc
+
+      - name: Package SDK with provenance, SBOM and manifest
+        run: |
+          mkdir -p dist
+          python3 scripts/package-webrtc-linux.py \
+            --checkout-root "$HOME/webrtc-checkout" \
+            --out-dir dist \
+            --tag-name "v${{ steps.vars.outputs.version }}" \
+            --webrtc-revision "${{ steps.vars.outputs.webrtc }}" \
+            --depot-tools-revision "${{ steps.vars.outputs.depot }}"
+          zip="dist/halla-webrtc-linux-x64-v${{ steps.vars.outputs.version }}.zip"
+          # Normaliza para "hash  nome-do-arquivo" (mesmo formato do Windows).
+          hash=$(sha256sum "$zip" | awk '{print $1}')
+          echo "$hash  $(basename "$zip")" > "$zip.sha256"
+
+      # Valida que o SDK linka e roda no mesmo compilador/ABI do app (g++ com
+      # libstdc++ do Ubuntu 22.04): cria a PeerConnectionFactory de verdade.
+      - name: Compile and run SDK factory smoke test
+        run: |
+          set -e
+          zip="dist/halla-webrtc-linux-x64-v${{ steps.vars.outputs.version }}.zip"
+          rm -rf sdk && mkdir sdk
+          unzip -q "$zip" -d sdk
+          g++ -std=c++20 -O1 -DWEBRTC_POSIX=1 \
+            -I sdk/include \
+            -I sdk/include/third_party/abseil-cpp \
+            -I sdk/include/third_party/libyuv/include \
+            samples/factory_smoke.cpp \
+            sdk/lib/linux-x64/libwebrtc.a \
+            -lpthread -ldl -lm -o webrtc_factory_smoke
+          ./webrtc_factory_smoke
+
+      - name: Upload immutable SDK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: halla-webrtc-linux-x64
+          if-no-files-found: error
+          path: |
+            dist/halla-webrtc-linux-x64-v${{ steps.vars.outputs.version }}.zip
+            dist/halla-webrtc-linux-x64-v${{ steps.vars.outputs.version }}.zip.sha256
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build-linux-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download SDK artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: halla-webrtc-linux-x64
+          path: dist
+
+      - name: Publish SDK release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Halla WebRTC SDK ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/halla-webrtc-linux-x64-*.zip
+            dist/halla-webrtc-linux-x64-*.zip.sha256
