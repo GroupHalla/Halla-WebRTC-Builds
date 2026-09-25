@@ -7,7 +7,15 @@ Reproducible WebRTC SDKs used by Halla Desktop and Halla Mobile.
 - Package version: `0.1.14` (`VERSION`)
 - WebRTC source: exact commit in `WEBRTC_REVISION`
 - depot_tools: exact commit in `DEPOT_TOOLS_REVISION`
-- Target: Windows x64, MSVC ABI, dynamic CRT (`/MD`)
+- Targets:
+  - **Windows x64** (tag `v0.1.14`): MSVC ABI, dynamic CRT (`/MD`)
+  - **Linux x64** (tag `linux-v0.1.14`): system libstdc++ (Ubuntu 22.04,
+    glibc 2.35) so exported C++ signatures match the GCC-built Halla app —
+    same decision as the Windows SDK (MSVC STL instead of Chromium libc++).
+    Two checkout patches are applied for libstdc++ 12 compatibility
+    (`nullptr_t` qualification and a heterogeneous-pair fallback in
+    `rtc_base/containers/flat_tree.h`); both are documented in
+    `build-webrtc-linux.yml`.
 
 ## Release contents
 
@@ -17,7 +25,7 @@ halla-webrtc-sdk/
   MANIFEST.sha256
   SBOM.spdx.json
   include/
-  lib/windows-x64/webrtc.lib
+  lib/windows-x64/webrtc.lib | lib/linux-x64/libwebrtc.a
   licenses/
 ```
 
