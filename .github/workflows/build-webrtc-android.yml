@@ -22,7 +22,17 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      # android-actions/setup-android@v3 foi removida: ela instala o pacote
+      # legado "tools", que o Google retirou do repositório do sdkmanager
+      # ("Failed to find package 'tools'"). Os runners ubuntu já vêm com o
+      # Android SDK completo pré-instalado (ANDROID_HOME) e licenças aceitas
+      # — só garantimos que o ambiente está lá.
+      - name: Verify preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}" && test -d "${ANDROID_HOME}"
+          test -x "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
 
       - name: Validate Android SDK version and tag
         shell: bash
