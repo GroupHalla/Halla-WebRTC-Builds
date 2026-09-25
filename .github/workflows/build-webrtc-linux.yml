@@ -100,6 +100,16 @@ jobs:
             echo "nullptr_t qualificado em $(echo "$files" | wc -l) arquivos"
           fi
 
+      # flat_tree (rtc_base/containers) com lookup heterogêneo exige
+      # operator<=> de pair com 4 templates — libstdc++ >= 13, libc++ e MSVC
+      # têm; o libstdc++ 12 do ubuntu-22.04 não (call/payload_type_picker.cc
+      # não compilava). Injeta um fallback lexicográfico no KeyValueCompare.
+      - name: Patch flat_tree for libstdc++ 12 (heterogeneous pair compare)
+        run: |
+          set -e
+          python3 "$GITHUB_WORKSPACE/scripts/patch_flat_tree_libstdcpp.py" \
+            "$HOME/webrtc-checkout/src"
+
       - name: Configure GN
         run: |
           cd "$HOME/webrtc-checkout/src"
