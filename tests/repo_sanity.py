@@ -36,6 +36,9 @@ assert "EXPECTED_UPSTREAM_SHA256" in patcher
 assert "halla-webrtc-android-144.7559.09-p1.aar" in android_workflow
 
 if "--verify-upstream" in sys.argv:
+    import time
+    import urllib.error
+
     urls = {
         "WEBRTC_REVISION": "https://webrtc.googlesource.com/src/+/{revision}?format=JSON",
         "DEPOT_TOOLS_REVISION": "https://chromium.googlesource.com/chromium/tools/depot_tools/+/{revision}?format=JSON",
@@ -43,10 +46,26 @@ if "--verify-upstream" in sys.argv:
     for name, template in urls.items():
         url = template.format(revision=revisions[name])
         request = urllib.request.Request(url, headers={"User-Agent": "Halla-WebRTC-policy"})
-        with urllib.request.urlopen(request, timeout=30) as response:
-            assert response.status == 200, (name, response.status)
-            body = response.read(256)
-            assert revisions[name].encode() in body, f"{name} não pertence ao upstream esperado"
+        # googlesource responde 503 intermitentemente (visto 2x no mesmo dia
+        # nos runs de 2026-09-25); o gate de política não pode reprovar o
+        # repositório por indisponibilidade transitória do upstream.
+        last_error = None
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    assert response.status == 200, (name, response.status)
+                    body = response.read(256)
+                    assert revisions[name].encode() in body, f"{name} não pertence ao upstream esperado"
+                last_error = None
+                break
+            except urllib.error.HTTPError as error:
+                if error.code not in (503, 502, 504):
+                    raise
+                last_error = error
+                print(f"upstream {name}: HTTP {error.code}, tentativa {attempt + 1}/4")
+                time.sleep(10 * (attempt + 1))
+        if last_error is not None:
+            raise last_error
         print(f"verified upstream: {name}")
 
 print(f"WebRTC build policy OK: {version}")
