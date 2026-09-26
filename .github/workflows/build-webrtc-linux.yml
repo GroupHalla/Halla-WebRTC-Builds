@@ -110,6 +110,15 @@ jobs:
           python3 "$GITHUB_WORKSPACE/scripts/patch_flat_tree_libstdcpp.py" \
             "$HOME/webrtc-checkout/src"
 
+      # Headers públicos que o clang aceita mas o GCC (consumidor do SDK)
+      # rejeita. O patch é feito ANTES do empacotamento para que o ZIP já
+      # saia GCC-friendly.
+      - name: Patch SDK headers for GCC consumers
+        run: |
+          set -e
+          python3 "$GITHUB_WORKSPACE/scripts/patch_gcc_sdk_headers.py" \
+            "$HOME/webrtc-checkout/src"
+
       - name: Configure GN
         run: |
           cd "$HOME/webrtc-checkout/src"
@@ -152,6 +161,19 @@ jobs:
             sdk/lib/linux-x64/libwebrtc.a \
             -lpthread -ldl -lm -o webrtc_factory_smoke
           ./webrtc_factory_smoke
+
+      # Valida que TODOS os headers públicos que o app Halla consome (o TU
+      # mais pesado, HallaWebRtcSession.cpp) são aceitos pelo mesmo g++ do
+      # build do app — pega erros que o clang do build do SDK aceita
+      # (ex.: -Wchanges-meaning) ANTES do release do SDK.
+      - name: GCC consumer headers smoke
+        run: |
+          set -e
+          g++ -std=c++20 -fsyntax-only -Wall -DWEBRTC_POSIX=1 \
+            -I sdk/include \
+            -I sdk/include/third_party/abseil-cpp \
+            -I sdk/include/third_party/libyuv/include \
+            samples/consumer_headers_smoke.cpp
 
       - name: Upload immutable SDK artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
