@@ -119,6 +119,18 @@ jobs:
           python3 "$GITHUB_WORKSPACE/scripts/patch_gcc_sdk_headers.py" \
             "$HOME/webrtc-checkout/src"
 
+      # O build config do Chromium liga -Wa,--crel,--allow-experimental-crel
+      # para ELF porque se linka com lld (que entende SHT_CREL). O SDK é
+      # consumido pelo app com GNU ld do Ubuntu 22.04 (binutils 2.38), que
+      # NÃO conhece CREL: "unknown type [0x40000014] section `.crel.text'"
+      # + cascata de erros .eh_frame no link. Sem a flag o clang emite
+      # .rela.* clássico, aceito por qualquer binutils.
+      - name: Patch CREL off (SDK is linked by GNU ld, not lld)
+        run: |
+          set -e
+          python3 "$GITHUB_WORKSPACE/scripts/patch_disable_crel.py" \
+            "$HOME/webrtc-checkout/src"
+
       - name: Configure GN
         run: |
           cd "$HOME/webrtc-checkout/src"
