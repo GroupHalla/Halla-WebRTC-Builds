@@ -171,7 +171,7 @@ jobs:
             -I sdk/include/third_party/libyuv/include \
             samples/factory_smoke.cpp \
             sdk/lib/linux-x64/libwebrtc.a \
-            -lpthread -ldl -lm -o webrtc_factory_smoke
+            -lpthread -ldl -lm -lX11 -o webrtc_factory_smoke
           ./webrtc_factory_smoke
 
       # Valida que TODOS os headers públicos que o app Halla consome (o TU
